@@ -22,7 +22,7 @@ jobs:
     steps:
       - setup_remote_docker:
           version: 19.03.13
-          docker_layer_caching: true
+          # docker_layer_caching: true
       - restore_cache:
           keys:
             - go-mod-v1-{{ arch }}-{{ .Branch }}-{{ checksum "go.sum" }}
