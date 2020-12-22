@@ -16,6 +16,14 @@ $ curl -L https://github.com/golang-migrate/migrate/releases/download/$version/m
 $ brew install golang-migrate
 ```
 
+### Windows
+
+Using [scoop](https://scoop.sh/)
+
+```bash
+$ scoop install migrate
+```
+
 ### Linux (*.deb package)
 
 ```bash
@@ -33,7 +41,7 @@ $ apt-get install -y migrate
 $ go get -u -d github.com/golang-migrate/migrate/cmd/migrate
 $ cd $GOPATH/src/github.com/golang-migrate/migrate/cmd/migrate
 $ git checkout $TAG  # e.g. v4.1.0
-$ go build -tags 'postgres' -ldflags="-X main.Version=$(git describe --tags)" -o $GOPATH/bin/migrate github.com/golang-migrate/migrate/cmd/migrate
+$ go build -tags 'postgres' -ldflags="-X main.Version=$(git describe --tags)" -o $GOPATH/bin/migrate $GOPATH/src/github.com/golang-migrate/migrate/cmd/migrate
 ```
 
 #### Unversioned
@@ -41,6 +49,8 @@ $ go build -tags 'postgres' -ldflags="-X main.Version=$(git describe --tags)" -o
 ```bash
 $ go get -tags 'postgres' -u github.com/golang-migrate/migrate/cmd/migrate
 ```
+
+[Make sure](https://github.com/golang-migrate/migrate/pull/257#issuecomment-705249902) you're not installing the `migrate` CLI from a module. e.g. there should not be any `go.mod` files in your current directory or any directory from your current one to the root
 
 #### Notes
 

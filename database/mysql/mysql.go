@@ -21,7 +21,6 @@ import (
 )
 
 import (
-	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database"
 )
 
@@ -42,6 +41,7 @@ var (
 type Config struct {
 	MigrationsTable string
 	DatabaseName    string
+	NoLock          bool
 }
 
 type Mysql struct {
@@ -64,17 +64,19 @@ func WithInstance(instance *sql.DB, config *Config) (database.Driver, error) {
 		return nil, err
 	}
 
-	query := `SELECT DATABASE()`
-	var databaseName sql.NullString
-	if err := instance.QueryRow(query).Scan(&databaseName); err != nil {
-		return nil, &database.Error{OrigErr: err, Query: []byte(query)}
-	}
+	if config.DatabaseName == "" {
+		query := `SELECT DATABASE()`
+		var databaseName sql.NullString
+		if err := instance.QueryRow(query).Scan(&databaseName); err != nil {
+			return nil, &database.Error{OrigErr: err, Query: []byte(query)}
+		}
 
-	if len(databaseName.String) == 0 {
-		return nil, ErrNoDatabaseName
-	}
+		if len(databaseName.String) == 0 {
+			return nil, ErrNoDatabaseName
+		}
 
-	config.DatabaseName = databaseName.String
+		config.DatabaseName = databaseName.String
+	}
 
 	if len(config.MigrationsTable) == 0 {
 		config.MigrationsTable = DefaultMigrationsTable
@@ -98,95 +100,139 @@ func WithInstance(instance *sql.DB, config *Config) (database.Driver, error) {
 	return mx, nil
 }
 
-// urlToMySQLConfig takes a net/url URL and returns a go-sql-driver/mysql Config.
-// Manually sets username and password to avoid net/url from url-encoding the reserved URL characters
-func urlToMySQLConfig(u nurl.URL) (*mysql.Config, error) {
-	origUserInfo := u.User
-	u.User = nil
+// extractCustomQueryParams extracts the custom query params (ones that start with "x-") from
+// mysql.Config.Params (connection parameters) as to not interfere with connecting to MySQL
+func extractCustomQueryParams(c *mysql.Config) (map[string]string, error) {
+	if c == nil {
+		return nil, ErrNilConfig
+	}
+	customQueryParams := map[string]string{}
 
-	c, err := mysql.ParseDSN(strings.TrimPrefix(u.String(), "mysql://"))
+	for k, v := range c.Params {
+		if strings.HasPrefix(k, "x-") {
+			customQueryParams[k] = v
+			delete(c.Params, k)
+		}
+	}
+	return customQueryParams, nil
+}
+
+func urlToMySQLConfig(url string) (*mysql.Config, error) {
+	// Need to parse out custom TLS parameters and call
+	// mysql.RegisterTLSConfig() before mysql.ParseDSN() is called
+	// which consumes the registered tls.Config
+	// Fixes: https://github.com/golang-migrate/migrate/issues/411
+	//
+	// Can't use url.Parse() since it fails to parse MySQL DSNs
+	// mysql.ParseDSN() also searches for "?" to find query parameters:
+	// https://github.com/go-sql-driver/mysql/blob/46351a8/dsn.go#L344
+	if idx := strings.LastIndex(url, "?"); idx > 0 {
+		rawParams := url[idx+1:]
+		parsedParams, err := nurl.ParseQuery(rawParams)
+		if err != nil {
+			return nil, err
+		}
+
+		ctls := parsedParams.Get("tls")
+		if len(ctls) > 0 {
+			if _, isBool := readBool(ctls); !isBool && strings.ToLower(ctls) != "skip-verify" {
+				rootCertPool := x509.NewCertPool()
+				pem, err := ioutil.ReadFile(parsedParams.Get("x-tls-ca"))
+				if err != nil {
+					return nil, err
+				}
+
+				if ok := rootCertPool.AppendCertsFromPEM(pem); !ok {
+					return nil, ErrAppendPEM
+				}
+
+				clientCert := make([]tls.Certificate, 0, 1)
+				if ccert, ckey := parsedParams.Get("x-tls-cert"), parsedParams.Get("x-tls-key"); ccert != "" || ckey != "" {
+					if ccert == "" || ckey == "" {
+						return nil, ErrTLSCertKeyConfig
+					}
+					certs, err := tls.LoadX509KeyPair(ccert, ckey)
+					if err != nil {
+						return nil, err
+					}
+					clientCert = append(clientCert, certs)
+				}
+
+				insecureSkipVerify := false
+				insecureSkipVerifyStr := parsedParams.Get("x-tls-insecure-skip-verify")
+				if len(insecureSkipVerifyStr) > 0 {
+					x, err := strconv.ParseBool(insecureSkipVerifyStr)
+					if err != nil {
+						return nil, err
+					}
+					insecureSkipVerify = x
+				}
+
+				err = mysql.RegisterTLSConfig(ctls, &tls.Config{
+					RootCAs:            rootCertPool,
+					Certificates:       clientCert,
+					InsecureSkipVerify: insecureSkipVerify,
+				})
+				if err != nil {
+					return nil, err
+				}
+			}
+		}
+	}
+
+	config, err := mysql.ParseDSN(strings.TrimPrefix(url, "mysql://"))
 	if err != nil {
 		return nil, err
 	}
-	if origUserInfo != nil {
-		c.User = origUserInfo.Username()
-		if p, ok := origUserInfo.Password(); ok {
-			c.Passwd = p
-		}
+
+	config.MultiStatements = true
+
+	// Keep backwards compatibility from when we used net/url.Parse() to parse the DSN.
+	// net/url.Parse() would automatically unescape it for us.
+	// See: https://play.golang.org/p/q9j1io-YICQ
+	user, err := nurl.QueryUnescape(config.User)
+	if err != nil {
+		return nil, err
 	}
-	return c, nil
+	config.User = user
+
+	password, err := nurl.QueryUnescape(config.Passwd)
+	if err != nil {
+		return nil, err
+	}
+	config.Passwd = password
+
+	return config, nil
 }
 
 func (m *Mysql) Open(url string) (database.Driver, error) {
-	purl, err := nurl.Parse(url)
+	config, err := urlToMySQLConfig(url)
 	if err != nil {
 		return nil, err
 	}
 
-	q := purl.Query()
-	q.Set("multiStatements", "true")
-	purl.RawQuery = q.Encode()
+	customParams, err := extractCustomQueryParams(config)
+	if err != nil {
+		return nil, err
+	}
 
-	migrationsTable := purl.Query().Get("x-migrations-table")
-
-	// use custom TLS?
-	ctls := purl.Query().Get("tls")
-	if len(ctls) > 0 {
-		if _, isBool := readBool(ctls); !isBool && strings.ToLower(ctls) != "skip-verify" {
-			rootCertPool := x509.NewCertPool()
-			pem, err := ioutil.ReadFile(purl.Query().Get("x-tls-ca"))
-			if err != nil {
-				return nil, err
-			}
-
-			if ok := rootCertPool.AppendCertsFromPEM(pem); !ok {
-				return nil, ErrAppendPEM
-			}
-
-			clientCert := make([]tls.Certificate, 0, 1)
-			if ccert, ckey := purl.Query().Get("x-tls-cert"), purl.Query().Get("x-tls-key"); ccert != "" || ckey != "" {
-				if ccert == "" || ckey == "" {
-					return nil, ErrTLSCertKeyConfig
-				}
-				certs, err := tls.LoadX509KeyPair(ccert, ckey)
-				if err != nil {
-					return nil, err
-				}
-				clientCert = append(clientCert, certs)
-			}
-
-			insecureSkipVerify := false
-			if len(purl.Query().Get("x-tls-insecure-skip-verify")) > 0 {
-				x, err := strconv.ParseBool(purl.Query().Get("x-tls-insecure-skip-verify"))
-				if err != nil {
-					return nil, err
-				}
-				insecureSkipVerify = x
-			}
-
-			err = mysql.RegisterTLSConfig(ctls, &tls.Config{
-				RootCAs:            rootCertPool,
-				Certificates:       clientCert,
-				InsecureSkipVerify: insecureSkipVerify,
-			})
-			if err != nil {
-				return nil, err
-			}
+	noLockParam, noLock := customParams["x-no-lock"], false
+	if noLockParam != "" {
+		noLock, err = strconv.ParseBool(noLockParam)
+		if err != nil {
+			return nil, fmt.Errorf("could not parse x-no-lock as bool: %w", err)
 		}
 	}
 
-	c, err := urlToMySQLConfig(*migrate.FilterCustomQuery(purl))
-	if err != nil {
-		return nil, err
-	}
-	db, err := sql.Open("mysql", c.FormatDSN())
+	db, err := sql.Open("mysql", config.FormatDSN())
 	if err != nil {
 		return nil, err
 	}
 
 	mx, err := WithInstance(db, &Config{
-		DatabaseName:    purl.Path,
-		MigrationsTable: migrationsTable,
+		DatabaseName:    config.DBName,
+		MigrationsTable: customParams["x-migrations-table"],
+		NoLock:          noLock,
 	})
 	if err != nil {
 		return nil, err
@@ -207,6 +253,11 @@ func (m *Mysql) Close() error {
 func (m *Mysql) Lock() error {
 	if m.isLocked {
 		return database.ErrLocked
+	}
+
+	if m.config.NoLock {
+		m.isLocked = true
+		return nil
 	}
 
 	aid, err := database.GenerateAdvisoryLockId(
@@ -231,6 +282,11 @@ func (m *Mysql) Lock() error {
 
 func (m *Mysql) Unlock() error {
 	if !m.isLocked {
+		return nil
+	}
+
+	if m.config.NoLock {
+		m.isLocked = false
 		return nil
 	}
 
@@ -281,7 +337,10 @@ func (m *Mysql) SetVersion(version int, dirty bool) error {
 		return &database.Error{OrigErr: err, Query: []byte(query)}
 	}
 
-	if version >= 0 {
+	// Also re-write the schema version for nil dirty versions to prevent
+	// empty schema version for failed down migration on the first migration
+	// See: https://github.com/golang-migrate/migrate/issues/330
+	if version >= 0 || (version == database.NilVersion && dirty) {
 		query := "INSERT INTO `" + m.config.MigrationsTable + "` (version, dirty) VALUES (?, ?)"
 		if _, err := tx.ExecContext(context.Background(), query, version, dirty); err != nil {
 			if errRollback := tx.Rollback(); errRollback != nil {
@@ -342,6 +401,9 @@ func (m *Mysql) Drop() (err error) {
 			tableNames = append(tableNames, tableName)
 		}
 	}
+	if err := tables.Err(); err != nil {
+		return &database.Error{OrigErr: err, Query: []byte(query)}
+	}
 
 	if len(tableNames) > 0 {
 		// disable checking foreign key constraints until finished
@@ -387,7 +449,7 @@ func (m *Mysql) ensureVersionTable() (err error) {
 
 	// check if migration table exists
 	var result string
-	query := `SHOW TABLES LIKE "` + m.config.MigrationsTable + `"`
+	query := `SHOW TABLES LIKE '` + m.config.MigrationsTable + `'`
 	if err := m.conn.QueryRowContext(context.Background(), query).Scan(&result); err != nil {
 		if err != sql.ErrNoRows {
 			return &database.Error{OrigErr: err, Query: []byte(query)}
