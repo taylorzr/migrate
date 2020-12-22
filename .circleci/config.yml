@@ -1,13 +1,13 @@
 # Golang CircleCI 2.0 configuration file
 #
 # Check https://circleci.com/docs/2.0/language-go/ for more details
-version: 2.0
+version: 2.1
 
 jobs:
-  "golang-1.11": &template
+  "golang-1.14": &template
     docker:
       # https://circleci.com/docs/2.0/configuration-reference/#setup_remote_docker
-      - image: circleci/golang:1.11
+      - image: cimg/go:1.14
 
     # https://circleci.com/docs/2.0/configuration-reference/#resource_class
     resource_class: xlarge
@@ -21,7 +21,7 @@ jobs:
 
     steps:
       - setup_remote_docker:
-          version: 18.09.3
+          version: 19.03.13
           docker_layer_caching: true
       - restore_cache:
           keys:
@@ -35,14 +35,14 @@ jobs:
           paths:
             - "/go/pkg/mod"
 
-  "golang-1.12":
+  "golang-1.15":
     <<: *template
     docker:
-      - image: circleci/golang:1.12
+      - image: cimg/go:1.15
 
 workflows:
   version: 2
   build:
     jobs:
-      - "golang-1.11"
-      - "golang-1.12"
+      - "golang-1.14"
+      - "golang-1.15"
