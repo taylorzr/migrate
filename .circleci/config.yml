@@ -29,16 +29,9 @@ jobs:
           keys:
             - go-mod-v1-{{ arch }}-{{ .Branch }}-{{ checksum "go.sum" }}
       - run: curl -sL -o ~/bin/gimme https://raw.githubusercontent.com/travis-ci/gimme/master/gimme
-      - run: chmod +x ~/bin/gimme
+      - run: curl -sfL -o ~/bin/golangci-lint.sh https://install.goreleaser.com/github.com/golangci/golangci-lint.sh
+      - run: chmod +x ~/bin/gimme ~/bin/golangci-lint.sh
       - run: eval "$(gimme $GO_VERSION)"
-      - run: go env
-      - run: sh -c "echo $(go env)"
-      - run: echo $(go env)
-      - run: echo $(go env GOPATH)
-      - run: ls -la ~
-      - run: cat $GIMME_ENV
-      - run: "curl -sfL -o ~/bin/golangci-lint.sh https://install.goreleaser.com/github.com/golangci/golangci-lint.sh"
-      - run: chmod +x ~/bin/golangci-lint.sh
       - run: golangci-lint.sh -b ~/bin v1.33.0
       - checkout
       - run: golangci-lint run
