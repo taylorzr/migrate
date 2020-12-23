@@ -33,6 +33,8 @@ jobs:
       - run: eval "$(~/gimme $GO_VERSION)"
       - run: go env
       - run: sh -c "echo $(go env)"
+      - run: echo $(go env)
+      - run: echo $(go env GOPATH)
       - run: ls -la ~
       - run: cat $GIMME_ENV
       - run: "curl -sfL -o ~/golangci-lint.sh https://install.goreleaser.com/github.com/golangci/golangci-lint.sh"
