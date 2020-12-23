@@ -19,7 +19,7 @@ jobs:
 
     environment:
       GO111MODULE: "on"
-      GO_VERSION: "1.14"
+      GO_VERSION: "1.14.x"
 
     steps:
       # - setup_remote_docker:
@@ -43,7 +43,7 @@ jobs:
   "golang-1_15":
     <<: *template
     environment:
-      GO_VERSION: "1.15"
+      GO_VERSION: "1.15.x"
 
 workflows:
   version: 2
