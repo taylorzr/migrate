@@ -30,7 +30,7 @@ jobs:
       - run: "curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s -- -b $(go env GOPATH)/bin v1.33.0"
       - checkout
       - run: golangci-lint run
-      - run: docker build -f Dockerfile.circleci -t migrate:$CIRCLE_BUILD_NUM .
+      - run: docker build -f Dockerfile.circleci -t migrate:$CIRCLE_BUILD_NUM --build-arg DOCKER_IMAGE .
       - run: docker run migrate:$CIRCLE_BUILD_NUM
       - save_cache:
           key: go-mod-v1-{{ arch }}-{{ .Branch }}-{{ checksum "go.sum" }}
