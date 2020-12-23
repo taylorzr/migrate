@@ -28,11 +28,11 @@ jobs:
       - restore_cache:
           keys:
             - go-mod-v1-{{ arch }}-{{ .Branch }}-{{ checksum "go.sum" }}
-      - run: "curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s -- -b $(go env GOPATH)/bin v1.33.0"
       - run: curl -sL -o ~/gimme https://raw.githubusercontent.com/travis-ci/gimme/master/gimme
       - run: chmod +x ~/gimme
       - run: ~/gimme $GO_VERSION
       - run: go version
+      - run: "curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s -- -b $(go env GOPATH)/bin v1.33.0"
       - checkout
       - run: golangci-lint run
       - run: make test COVERAGE_DIR=/tmp/coverage
