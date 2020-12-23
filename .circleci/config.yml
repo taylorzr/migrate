@@ -5,9 +5,10 @@ version: 2.1
 
 jobs:
   "golang-1_14": &template
-    docker:
-      # https://circleci.com/docs/2.0/configuration-reference/#setup_remote_docker
-      - image: cimg/go:1.14
+    machine:
+      # https://circleci.com/docs/2.0/configuration-reference/#available-machine-images
+      image: ubuntu-2004:202010-01
+      docker_layer_caching: true
 
     # https://circleci.com/docs/2.0/configuration-reference/#resource_class
     resource_class: medium
@@ -18,20 +19,23 @@ jobs:
 
     environment:
       GO111MODULE: "on"
-      DOCKER_IMAGE: golang:1.14-alpine
+      GO_VERSION: "1.14"
 
     steps:
-      - setup_remote_docker:
-          version: 19.03.13
+      # - setup_remote_docker:
+      #    version: 19.03.13
           # docker_layer_caching: true
       - restore_cache:
           keys:
             - go-mod-v1-{{ arch }}-{{ .Branch }}-{{ checksum "go.sum" }}
       - run: "curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s -- -b $(go env GOPATH)/bin v1.33.0"
+      - run: curl -sL -o ~/gimme https://raw.githubusercontent.com/travis-ci/gimme/master/gimme
+      - run: chmod +x ~/gimme
+      - run: ~/gimme $GO_VERSION
+      - run: go version
       - checkout
       - run: golangci-lint run
-      - run: docker build -f Dockerfile.circleci -t migrate:$CIRCLE_BUILD_NUM --build-arg DOCKER_IMAGE .
-      - run: docker run migrate:$CIRCLE_BUILD_NUM
+      - run: make test COVERAGE_DIR=/tmp/coverage
       - save_cache:
           key: go-mod-v1-{{ arch }}-{{ .Branch }}-{{ checksum "go.sum" }}
           paths:
@@ -39,10 +43,8 @@ jobs:
 
   "golang-1_15":
     <<: *template
-    docker:
-      - image: cimg/go:1.15
     environment:
-      DOCKER_IMAGE: golang:1.15-alpine
+      GO_VERSION: "1.15"
 
 workflows:
   version: 2
