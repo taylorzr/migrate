@@ -8,7 +8,7 @@ jobs:
     machine:
       # https://circleci.com/docs/2.0/configuration-reference/#available-machine-images
       image: ubuntu-2004:202010-01
-      docker_layer_caching: true
+      # docker_layer_caching: true
 
     # https://circleci.com/docs/2.0/configuration-reference/#resource_class
     resource_class: medium
