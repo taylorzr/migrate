@@ -45,6 +45,9 @@ jobs:
     <<: *template
     environment:
       GO_VERSION: "1.15.x"
+    steps:
+      - run: go install github.com/mattn/goveralls
+      - run: goveralls -service=circle-ci -coverprofile /tmp/coverage/combined.txt
 
 workflows:
   version: 2
