@@ -33,7 +33,7 @@ jobs:
       - run: chmod +x ~/bin/gimme ~/bin/golangci-lint.sh
       - run: eval "$(gimme $GO_VERSION)"
       - run: golangci-lint.sh -b ~/bin v1.33.0
-      - checkout: "."
+      - checkout
       - run: golangci-lint run
       - run: make test COVERAGE_DIR=/tmp/coverage
       - save_cache:
