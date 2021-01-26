@@ -21,7 +21,7 @@ jobs:
       GO111MODULE: "on"
       GO_VERSION: "1.14.x"
 
-    steps: &steps_template
+    steps:
       # - setup_remote_docker:
       #    version: 19.03.13
           # docker_layer_caching: true
@@ -40,15 +40,13 @@ jobs:
           key: go-mod-v1-{{ arch }}-{{ .Branch }}-{{ checksum "go.sum" }}
           paths:
             - "/go/pkg/mod"
+      - run: go get github.com/mattn/goveralls
+      - run: goveralls -service=circle-ci -coverprofile /tmp/coverage/combined.txt
 
   "golang-1_15":
     <<: *template
     environment:
       GO_VERSION: "1.15.x"
-    steps:
-      - <<: *steps_template
-      - run: go get github.com/mattn/goveralls
-      - run: goveralls -service=circle-ci -coverprofile /tmp/coverage/combined.txt
 
 workflows:
   version: 2
