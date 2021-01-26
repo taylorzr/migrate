@@ -21,7 +21,7 @@ jobs:
       GO111MODULE: "on"
       GO_VERSION: "1.14.x"
 
-    steps:
+    steps: &steps_template
       # - setup_remote_docker:
       #    version: 19.03.13
           # docker_layer_caching: true
@@ -46,7 +46,8 @@ jobs:
     environment:
       GO_VERSION: "1.15.x"
     steps:
-      - run: go install github.com/mattn/goveralls
+      - <<: *steps_template
+      - run: go get github.com/mattn/goveralls
       - run: goveralls -service=circle-ci -coverprofile /tmp/coverage/combined.txt
 
 workflows:
