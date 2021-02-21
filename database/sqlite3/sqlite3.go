@@ -12,7 +12,7 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database"
 	"github.com/hashicorp/go-multierror"
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 )
 
 func init() {
@@ -97,7 +97,7 @@ func (m *Sqlite) Open(url string) (database.Driver, error) {
 		return nil, err
 	}
 	dbfile := strings.Replace(migrate.FilterCustomQuery(purl).String(), "sqlite3://", "", 1)
-	db, err := sql.Open("sqlite3", dbfile)
+	db, err := sql.Open("sqlite", dbfile)
 	if err != nil {
 		return nil, err
 	}

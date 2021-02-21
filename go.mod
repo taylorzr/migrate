@@ -28,7 +28,6 @@ require (
 	github.com/ktrysmt/go-bitbucket v0.6.4
 	github.com/lib/pq v1.8.0
 	github.com/markbates/pkger v0.15.1
-	github.com/mattn/go-sqlite3 v1.10.0
 	github.com/mutecomm/go-sqlcipher/v4 v4.4.0
 	github.com/nakagami/firebirdsql v0.0.0-20190310045651-3c02a58cfed8
 	github.com/neo4j/neo4j-go-driver v1.8.1-0.20200803113522-b626aa943eba
@@ -55,6 +54,7 @@ require (
 	modernc.org/lldb v1.0.0 // indirect
 	modernc.org/ql v1.0.0
 	modernc.org/sortutil v1.1.0 // indirect
+	modernc.org/sqlite v1.8.7
 	modernc.org/strutil v1.1.0 // indirect
 	modernc.org/zappy v1.0.0 // indirect
 )
